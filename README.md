@@ -19,7 +19,7 @@ MCP server for **Dell EMC PowerProtect Data Manager (PPDM)** and **NetWorker** â
 ## Install
 
 ```bash
-npx skills add ppdm-mcp-server
+npx skills add Moodswing9/ppdm-mcp-server
 ```
 
 Or add to your Claude Code config manually:
