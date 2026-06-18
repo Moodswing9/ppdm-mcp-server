@@ -34,5 +34,18 @@
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    ".env.example"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Moodswing9/ppdm-mcp-server.git"
+  },
+  "homepage": "https://github.com/Moodswing9/ppdm-mcp-server",
+  "engines": {
+    "node": ">=18"
   }
 }
