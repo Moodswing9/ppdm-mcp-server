@@ -3,27 +3,28 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { PPDMClient } from "./ppdm-client.js";
+import { NetWorkerClient } from "./networker-client.js";
 import { config } from "dotenv";
 
 config();
 
 const server = new McpServer({
   name: "ppdm-mcp-server",
-  version: "1.0.0",
+  version: "2.0.0",
 });
 
-function client(): PPDMClient {
-  return PPDMClient.fromEnv();
-}
-
 async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {
-  const c = client();
+  const c = PPDMClient.fromEnv();
   try {
     await c.login();
     return await fn(c);
   } finally {
     await c.logout();
   }
+}
+
+function nwClient(): NetWorkerClient {
+  return NetWorkerClient.fromEnv();
 }
 
 // ── list_failed_jobs ──────────────────────────────────────────────────────────
@@ -214,6 +215,139 @@ server.tool(
         text: `PPDM Health: ${health.status}\n` +
               `Failed jobs (last 24h): ${health.failedJobsLast24h}\n` +
               `Running jobs: ${health.runningJobs}`,
+      }],
+    };
+  },
+);
+
+// ── nw_list_savesets ──────────────────────────────────────────────────────────
+server.tool(
+  "nw_list_savesets",
+  "List NetWorker savesets (backup copies). Filter by client name.",
+  {
+    client_name: z.string().optional().describe("Filter by client hostname substring"),
+    limit:       z.number().optional().default(30).describe("Max results (default 30)"),
+  },
+  async ({ client_name, limit }) => {
+    const nw = nwClient();
+    const savesets = await nw.listSavesets({ clientName: client_name, limit });
+    return {
+      content: [{
+        type: "text",
+        text: savesets.length === 0
+          ? "No savesets found."
+          : `${savesets.length} saveset(s):\n\n` +
+            savesets.map(s =>
+              `• ${s.name} | client: ${s.clientName} | level: ${s.level} | status: ${s.status} | size: ${(s.size / 1024 / 1024).toFixed(1)} MB | saved: ${s.saveTime}`
+            ).join("\n"),
+      }],
+    };
+  },
+);
+
+// ── nw_list_failed_savesets ───────────────────────────────────────────────────
+server.tool(
+  "nw_list_failed_savesets",
+  "List NetWorker savesets that did not complete successfully.",
+  {
+    limit: z.number().optional().default(20).describe("Max results"),
+  },
+  async ({ limit }) => {
+    const nw = nwClient();
+    const failed = await nw.listFailedSavesets(limit);
+    return {
+      content: [{
+        type: "text",
+        text: failed.length === 0
+          ? "No failed savesets found."
+          : `${failed.length} failed saveset(s):\n\n` +
+            failed.map(s =>
+              `• ${s.name} | client: ${s.clientName} | status: ${s.status} | saved: ${s.saveTime}`
+            ).join("\n"),
+      }],
+    };
+  },
+);
+
+// ── nw_list_clients ───────────────────────────────────────────────────────────
+server.tool(
+  "nw_list_clients",
+  "List NetWorker clients registered on the server.",
+  {
+    name: z.string().optional().describe("Filter by client name substring"),
+  },
+  async ({ name }) => {
+    const nw = nwClient();
+    const clients = await nw.listClients(name);
+    return {
+      content: [{
+        type: "text",
+        text: clients.length === 0
+          ? "No clients found."
+          : `${clients.length} client(s):\n\n` +
+            clients.map(c =>
+              `• ${c.name} | hostname: ${c.hostname} | enabled: ${c.enabled}` +
+              (c.pools?.length ? ` | pools: ${c.pools.join(", ")}` : "")
+            ).join("\n"),
+      }],
+    };
+  },
+);
+
+// ── nw_get_client ─────────────────────────────────────────────────────────────
+server.tool(
+  "nw_get_client",
+  "Get detailed information for a specific NetWorker client by ID.",
+  {
+    client_id: z.string().describe("NetWorker client resource ID"),
+  },
+  async ({ client_id }) => {
+    const nw = nwClient();
+    const c = await nw.getClient(client_id);
+    return {
+      content: [{ type: "text", text: JSON.stringify(c, null, 2) }],
+    };
+  },
+);
+
+// ── nw_list_policies ──────────────────────────────────────────────────────────
+server.tool(
+  "nw_list_policies",
+  "List NetWorker protection groups (policies).",
+  {
+    name: z.string().optional().describe("Filter by policy name substring"),
+  },
+  async ({ name }) => {
+    const nw = nwClient();
+    const policies = await nw.listPolicies(name);
+    return {
+      content: [{
+        type: "text",
+        text: policies.length === 0
+          ? "No policies found."
+          : `${policies.length} policy/policies:\n\n` +
+            policies.map(p =>
+              `• ${p.name} | enabled: ${p.enabled}` + (p.action ? ` | action: ${p.action}` : "")
+            ).join("\n"),
+      }],
+    };
+  },
+);
+
+// ── nw_trigger_save ───────────────────────────────────────────────────────────
+server.tool(
+  "nw_trigger_save",
+  "Trigger an on-demand backup for a NetWorker client.",
+  {
+    client_id: z.string().describe("NetWorker client resource ID"),
+  },
+  async ({ client_id }) => {
+    const nw = nwClient();
+    const { jobId } = await nw.triggerSave(client_id);
+    return {
+      content: [{
+        type: "text",
+        text: `Backup triggered for client ${client_id}. Job ID: ${jobId}\nUse nw_list_savesets to monitor completion.`,
       }],
     };
   },
