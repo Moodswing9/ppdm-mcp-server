@@ -33,10 +33,14 @@ npm run dev
 | `NW_USER` | All NetWorker tools |
 | `NW_PASS` | All NetWorker tools |
 | `NW_PORT` | Optional — defaults to 9090 |
+| `DD_HOST` | All Data Domain tools |
+| `DD_USER` | All Data Domain tools |
+| `DD_PASS` | All Data Domain tools |
+| `DD_PORT` | Optional — defaults to 3009 |
 
 Copy `.env.example` to `.env` and fill in values.
 
-## Tools (15 total)
+## Tools (22 total)
 
 ### PPDM (9 tools)
 
@@ -52,6 +56,11 @@ Copy `.env.example` to `.env` and fill in values.
 | `get_sla_compliance` | SLA compliance report — compliant vs non-compliant assets |
 | `get_system_health` | Overall health summary (HEALTHY / WARNING / CRITICAL) |
 
+### PPDM — polling
+| Tool | What it does |
+|---|---|
+| `poll_until_complete` | Poll an activity until terminal state — turns trigger_backup into an awaitable operation |
+
 ### NetWorker (6 tools)
 
 | Tool | What it does |
@@ -63,13 +72,27 @@ Copy `.env.example` to `.env` and fill in values.
 | `nw_list_policies` | List protection groups |
 | `nw_trigger_save` | Trigger on-demand backup for a client |
 
+### Data Domain (6 tools)
+
+| Tool | What it does |
+|---|---|
+| `dd_system_info` | Model, version, serial number, uptime |
+| `dd_filesystem_stats` | Capacity — total/used/available GiB + used % with CRITICAL/WARNING/OK |
+| `dd_ddboost_status` | DDBoost enabled/disabled + authorized users |
+| `dd_list_storage_units` | List storage units with quota and assigned user |
+| `dd_create_storage_unit` | Create a new DDBoost storage unit |
+| `dd_list_users` | List local DD users |
+
+Requires `DD_HOST`, `DD_USER`, `DD_PASS` env vars (port defaults to 3009).
+
 ## Architecture
 
 ```
 src/
-├── index.ts            # MCP server — all 15 tool definitions
-├── ppdm-client.ts      # PPDMClient — login/logout, activity/asset/policy/restore methods
-└── networker-client.ts # NetWorkerClient — Basic Auth, saveset/client/policy methods
+├── index.ts              # MCP server — all 22 tool definitions
+├── ppdm-client.ts        # PPDMClient — login/logout, activity/asset/policy/poll methods
+├── networker-client.ts   # NetWorkerClient — Basic Auth, saveset/client/policy methods
+└── datadomain-client.ts  # DataDomainClient — Basic Auth, filesystem/DDBoost/storage units
 ```
 
 **Transport:** `StdioServerTransport` — Claude Code communicates over stdin/stdout.

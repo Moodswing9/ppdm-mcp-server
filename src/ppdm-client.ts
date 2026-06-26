@@ -103,6 +103,23 @@ export class PPDMClient {
     await this.http.post(`/activities/${id}/cancel`);
   }
 
+  async pollUntilComplete(
+    id: string,
+    opts: { intervalMs?: number; timeoutMs?: number } = {},
+  ): Promise<Activity> {
+    const interval = opts.intervalMs ?? 15_000;
+    const timeout  = opts.timeoutMs  ?? 3_600_000; // 1 hour default
+    const deadline = Date.now() + timeout;
+    const terminal = new Set(["SUCCEEDED", "FAILED", "CANCELED", "SKIPPED", "COMPLETED"]);
+
+    while (Date.now() < deadline) {
+      const act = await this.getActivity(id);
+      if (terminal.has(act.state?.toUpperCase() ?? "")) return act;
+      await new Promise(r => setTimeout(r, interval));
+    }
+    throw new Error(`Timed out waiting for activity ${id} after ${timeout / 1000}s`);
+  }
+
   async listAssets(opts: { name?: string; type?: string; limit?: number } = {}): Promise<Asset[]> {
     const filter: string[] = [];
     if (opts.name) filter.push(`name lk "%${opts.name}%"`);

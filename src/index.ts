@@ -4,13 +4,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { PPDMClient } from "./ppdm-client.js";
 import { NetWorkerClient } from "./networker-client.js";
+import { DataDomainClient } from "./datadomain-client.js";
 import { config } from "dotenv";
 
 config();
 
 const server = new McpServer({
   name: "ppdm-mcp-server",
-  version: "2.0.0",
+  version: "3.0.0",
 });
 
 async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {
@@ -25,6 +26,10 @@ async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {
 
 function nwClient(): NetWorkerClient {
   return NetWorkerClient.fromEnv();
+}
+
+function ddClient(): DataDomainClient {
+  return DataDomainClient.fromEnv();
 }
 
 // ── list_failed_jobs ──────────────────────────────────────────────────────────
@@ -220,6 +225,41 @@ server.tool(
   },
 );
 
+// ── poll_until_complete ───────────────────────────────────────────────────────
+server.tool(
+  "poll_until_complete",
+  "Poll a PPDM activity until it reaches a terminal state (SUCCEEDED, FAILED, CANCELED). Returns the final activity record. Use after trigger_backup to await completion.",
+  {
+    activity_id:  z.string().describe("PPDM activity ID to poll"),
+    timeout_mins: z.number().optional().default(60).describe("Max wait time in minutes (default 60)"),
+    interval_secs: z.number().optional().default(15).describe("Poll interval in seconds (default 15)"),
+  },
+  async ({ activity_id, timeout_mins, interval_secs }) => {
+    const act = await withClient(c =>
+      c.pollUntilComplete(activity_id, {
+        intervalMs: (interval_secs ?? 15) * 1_000,
+        timeoutMs:  (timeout_mins  ?? 60) * 60_000,
+      })
+    );
+    const duration = act.duration ? `${Math.round(act.duration / 60)}m` : "unknown";
+    const bytes    = act.bytesTransferred
+      ? `${(act.bytesTransferred / 1024 / 1024 / 1024).toFixed(2)} GB`
+      : "unknown";
+    return {
+      content: [{
+        type: "text",
+        text: `Activity ${activity_id} completed.\n\n` +
+              `Status:    ${act.state}\n` +
+              `Asset:     ${act.assetName} (${act.assetType})\n` +
+              `Duration:  ${duration}\n` +
+              `Data:      ${bytes}\n` +
+              `Ended:     ${act.endTime ?? "unknown"}` +
+              (act.error?.message ? `\nError:     ${act.error.message}` : ""),
+      }],
+    };
+  },
+);
+
 // ── nw_list_savesets ──────────────────────────────────────────────────────────
 server.tool(
   "nw_list_savesets",
@@ -348,6 +388,127 @@ server.tool(
       content: [{
         type: "text",
         text: `Backup triggered for client ${client_id}. Job ID: ${jobId}\nUse nw_list_savesets to monitor completion.`,
+      }],
+    };
+  },
+);
+
+// ── dd_system_info ────────────────────────────────────────────────────────────
+server.tool(
+  "dd_system_info",
+  "Get Data Domain system information — model, version, serial number, and uptime.",
+  {},
+  async () => {
+    const dd = ddClient();
+    const info = await dd.getSystemInfo();
+    return {
+      content: [{ type: "text", text: JSON.stringify(info, null, 2) }],
+    };
+  },
+);
+
+// ── dd_filesystem_stats ───────────────────────────────────────────────────────
+server.tool(
+  "dd_filesystem_stats",
+  "Get Data Domain filesystem capacity — total, used, available in GiB and used percentage. Use to check if DD is running low on space.",
+  {},
+  async () => {
+    const dd = ddClient();
+    const stats = await dd.getFilesystemStats();
+    const severity = stats.usedPct >= 85 ? "🔴 CRITICAL" : stats.usedPct >= 75 ? "🟡 WARNING" : "🟢 OK";
+    return {
+      content: [{
+        type: "text",
+        text: `Data Domain Filesystem\n\n` +
+              `Status:    ${severity} (${stats.usedPct}% used)\n` +
+              `Total:     ${stats.totalGiB} GiB\n` +
+              `Used:      ${stats.usedGiB} GiB\n` +
+              `Available: ${stats.availableGiB} GiB`,
+      }],
+    };
+  },
+);
+
+// ── dd_ddboost_status ─────────────────────────────────────────────────────────
+server.tool(
+  "dd_ddboost_status",
+  "Check whether DDBoost is enabled on Data Domain and list authorized DDBoost users.",
+  {},
+  async () => {
+    const dd = ddClient();
+    const status = await dd.getDDBoostStatus();
+    return {
+      content: [{
+        type: "text",
+        text: `DDBoost: ${status.enabled ? "✅ enabled" : "❌ disabled"}\n` +
+              (status.users.length > 0
+                ? `Users: ${status.users.join(", ")}`
+                : "No DDBoost users configured."),
+      }],
+    };
+  },
+);
+
+// ── dd_list_storage_units ─────────────────────────────────────────────────────
+server.tool(
+  "dd_list_storage_units",
+  "List DDBoost storage units on Data Domain — name, assigned user, quota, and status.",
+  {},
+  async () => {
+    const dd = ddClient();
+    const units = await dd.listStorageUnits();
+    return {
+      content: [{
+        type: "text",
+        text: units.length === 0
+          ? "No storage units found."
+          : `${units.length} storage unit(s):\n\n` +
+            units.map(u => {
+              const quota = u.quota ? `${(u.quota / 1024).toFixed(1)} GiB quota` : "no quota";
+              const used  = u.usedSpace ? `${(u.usedSpace / 1024).toFixed(1)} GiB used` : "";
+              return `• ${u.name} | user: ${u.user} | ${quota}${used ? ` | ${used}` : ""} | ${u.status}`;
+            }).join("\n"),
+      }],
+    };
+  },
+);
+
+// ── dd_create_storage_unit ────────────────────────────────────────────────────
+server.tool(
+  "dd_create_storage_unit",
+  "Create a new DDBoost storage unit on Data Domain.",
+  {
+    name:      z.string().describe("Storage unit name"),
+    user:      z.string().describe("DDBoost user to assign"),
+    quota_gib: z.number().optional().describe("Soft quota in GiB (optional)"),
+  },
+  async ({ name, user, quota_gib }) => {
+    const dd = ddClient();
+    await dd.createStorageUnit(name, user, quota_gib);
+    return {
+      content: [{
+        type: "text",
+        text: `Storage unit "${name}" created and assigned to user "${user}".` +
+              (quota_gib ? ` Soft quota: ${quota_gib} GiB.` : ""),
+      }],
+    };
+  },
+);
+
+// ── dd_list_users ─────────────────────────────────────────────────────────────
+server.tool(
+  "dd_list_users",
+  "List local users configured on Data Domain.",
+  {},
+  async () => {
+    const dd = ddClient();
+    const users = await dd.listUsers();
+    return {
+      content: [{
+        type: "text",
+        text: users.length === 0
+          ? "No users found."
+          : `${users.length} user(s):\n\n` + users.map(u => `• ${u}`).join("\n"),
       }],
     };
   },
