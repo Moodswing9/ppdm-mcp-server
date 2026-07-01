@@ -40,7 +40,7 @@ npm run dev
 
 Copy `.env.example` to `.env` and fill in values.
 
-## Tools (22 total)
+## Tools (25 total)
 
 ### PPDM (9 tools)
 
@@ -56,10 +56,13 @@ Copy `.env.example` to `.env` and fill in values.
 | `get_sla_compliance` | SLA compliance report — compliant vs non-compliant assets |
 | `get_system_health` | Overall health summary (HEALTHY / WARNING / CRITICAL) |
 
-### PPDM — polling
+### PPDM — bulk & restore
 | Tool | What it does |
 |---|---|
 | `poll_until_complete` | Poll an activity until terminal state — turns trigger_backup into an awaitable operation |
+| `restore_latest` | Find asset by name → get latest copy → trigger restore in one call |
+| `bulk_trigger_backup` | Trigger backups for all assets matching a filter under a named policy |
+| `bulk_cancel_jobs` | Cancel all running jobs, optionally filtered by asset type |
 
 ### NetWorker (6 tools)
 

@@ -11,7 +11,7 @@ config();
 
 const server = new McpServer({
   name: "ppdm-mcp-server",
-  version: "3.0.0",
+  version: "3.1.0",
 });
 
 async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {
@@ -255,6 +255,69 @@ server.tool(
               `Data:      ${bytes}\n` +
               `Ended:     ${act.endTime ?? "unknown"}` +
               (act.error?.message ? `\nError:     ${act.error.message}` : ""),
+      }],
+    };
+  },
+);
+
+// ── restore_latest ────────────────────────────────────────────────────────────
+server.tool(
+  "restore_latest",
+  "Restore an asset to its original location from the most recent copy — single call, no manual copy browsing needed.",
+  {
+    asset_name: z.string().describe("Asset name (partial match accepted)"),
+  },
+  async ({ asset_name }) => {
+    const { activityId, assetId, copyId } = await withClient(c => c.restoreLatest(asset_name));
+    return {
+      content: [{
+        type: "text",
+        text: `Restore triggered.\n\nAsset ID:    ${assetId}\nCopy ID:     ${copyId}\nActivity ID: ${activityId}\n\nUse poll_until_complete with activity ID to monitor progress.`,
+      }],
+    };
+  },
+);
+
+// ── bulk_trigger_backup ───────────────────────────────────────────────────────
+server.tool(
+  "bulk_trigger_backup",
+  "Trigger on-demand backup for all assets matching an optional filter under a named policy.",
+  {
+    policy_name:  z.string().describe("Protection policy name (partial match)"),
+    asset_name:   z.string().optional().describe("Filter assets by name substring"),
+    asset_type:   z.string().optional().describe("Filter assets by type (e.g. KUBERNETES)"),
+  },
+  async ({ policy_name, asset_name, asset_type }) => {
+    const { triggered, activityIds } = await withClient(c =>
+      c.bulkTriggerBackup(policy_name, { name: asset_name, type: asset_type })
+    );
+    return {
+      content: [{
+        type: "text",
+        text: triggered === 0
+          ? "No backups triggered — no matching assets found."
+          : `Triggered ${triggered} backup(s).\n\nActivity IDs:\n` +
+            activityIds.map(id => `• ${id}`).join("\n"),
+      }],
+    };
+  },
+);
+
+// ── bulk_cancel_jobs ──────────────────────────────────────────────────────────
+server.tool(
+  "bulk_cancel_jobs",
+  "Cancel all currently running PPDM jobs, optionally filtered by asset type.",
+  {
+    asset_type: z.string().optional().describe("Only cancel jobs for this asset type (e.g. KUBERNETES)"),
+  },
+  async ({ asset_type }) => {
+    const { canceled, ids } = await withClient(c => c.bulkCancelJobs(asset_type));
+    return {
+      content: [{
+        type: "text",
+        text: canceled === 0
+          ? "No running jobs found to cancel."
+          : `Canceled ${canceled} job(s):\n` + ids.map(id => `• ${id}`).join("\n"),
       }],
     };
   },
