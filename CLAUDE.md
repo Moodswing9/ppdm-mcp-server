@@ -42,7 +42,7 @@ Copy `.env.example` to `.env` and fill in values.
 
 ## Tools (29 total)
 
-### PPDM (13 tools)
+### PPDM (17 tools)
 
 | Tool | What it does |
 |---|---|
