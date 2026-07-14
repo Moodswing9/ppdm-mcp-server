@@ -40,9 +40,9 @@ npm run dev
 
 Copy `.env.example` to `.env` and fill in values.
 
-## Tools (25 total)
+## Tools (29 total)
 
-### PPDM (9 tools)
+### PPDM (13 tools)
 
 | Tool | What it does |
 |---|---|
@@ -63,6 +63,14 @@ Copy `.env.example` to `.env` and fill in values.
 | `restore_latest` | Find asset by name → get latest copy → trigger restore in one call |
 | `bulk_trigger_backup` | Trigger backups for all assets matching a filter under a named policy |
 | `bulk_cancel_jobs` | Cancel all running jobs, optionally filtered by asset type |
+
+### PPDM — schedule management
+| Tool | What it does |
+|---|---|
+| `list_schedules` | List all policy schedules — frequency, start time, duration, enabled state |
+| `update_schedule` | Change a policy's schedule frequency, start time, or window duration |
+| `pause_policy` | Disable a policy — jobs stop running until resumed |
+| `resume_policy` | Re-enable a paused policy |
 
 ### NetWorker (6 tools)
 
@@ -92,7 +100,7 @@ Requires `DD_HOST`, `DD_USER`, `DD_PASS` env vars (port defaults to 3009).
 
 ```
 src/
-├── index.ts              # MCP server — all 22 tool definitions
+├── index.ts              # MCP server — all 29 tool definitions
 ├── ppdm-client.ts        # PPDMClient — login/logout, activity/asset/policy/poll methods
 ├── networker-client.ts   # NetWorkerClient — Basic Auth, saveset/client/policy methods
 └── datadomain-client.ts  # DataDomainClient — Basic Auth, filesystem/DDBoost/storage units

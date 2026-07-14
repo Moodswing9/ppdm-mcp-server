@@ -11,7 +11,7 @@ config();
 
 const server = new McpServer({
   name: "ppdm-mcp-server",
-  version: "3.1.0",
+  version: "4.0.0",
 });
 
 async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {
@@ -320,6 +320,84 @@ server.tool(
           : `Canceled ${canceled} job(s):\n` + ids.map(id => `• ${id}`).join("\n"),
       }],
     };
+  },
+);
+
+// ── list_schedules ────────────────────────────────────────────────────────────
+server.tool(
+  "list_schedules",
+  "List all PPDM protection policy schedules — frequency, start time, duration, and enabled state.",
+  {},
+  async () => {
+    const schedules = await withClient(c => c.listSchedules());
+    if (schedules.length === 0) return { content: [{ type: "text", text: "No protection policies found." }] };
+    const lines = schedules.map(s => {
+      const stageInfo = s.stages
+        .filter(st => st.schedule)
+        .map(st => `    Stage ${st.type}: freq=${st.schedule!.frequency} start=${st.schedule!.startTime} duration=${st.schedule!.duration}`)
+        .join("\n");
+      return `• ${s.policyName} [${s.type}] — ${s.enabled ? "enabled" : "DISABLED"}\n${stageInfo || "    (no schedule stages)"}`;
+    });
+    return { content: [{ type: "text", text: `${schedules.length} policy schedule(s):\n\n${lines.join("\n\n")}` }] };
+  },
+);
+
+// ── update_schedule ───────────────────────────────────────────────────────────
+server.tool(
+  "update_schedule",
+  "Update the schedule of a PPDM protection policy stage — change frequency, start time, or duration.",
+  {
+    policy_name:  z.string().describe("Policy name (partial match)"),
+    stage_index:  z.number().optional().default(0).describe("Stage index to update (default 0 = first stage)"),
+    frequency:    z.string().optional().describe("New frequency, e.g. HOURLY, DAILY, WEEKLY"),
+    start_time:   z.string().optional().describe("New start time, e.g. 02:00"),
+    duration_mins: z.number().optional().describe("New window duration in minutes"),
+  },
+  async ({ policy_name, stage_index, frequency, start_time, duration_mins }) => {
+    await withClient(async c => {
+      const policies = await c.listPolicies(policy_name);
+      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
+      await c.updatePolicySchedule(policies[0].id, stage_index ?? 0, {
+        frequency,
+        startTime: start_time,
+        duration: duration_mins,
+      });
+    });
+    return { content: [{ type: "text", text: `Schedule updated for policy matching "${policy_name}".` }] };
+  },
+);
+
+// ── pause_policy ──────────────────────────────────────────────────────────────
+server.tool(
+  "pause_policy",
+  "Disable (pause) a PPDM protection policy — jobs will not run until resumed.",
+  {
+    policy_name: z.string().describe("Policy name (partial match)"),
+  },
+  async ({ policy_name }) => {
+    await withClient(async c => {
+      const policies = await c.listPolicies(policy_name);
+      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
+      await c.setPolicyEnabled(policies[0].id, false);
+    });
+    return { content: [{ type: "text", text: `Policy "${policy_name}" paused (disabled). Use resume_policy to re-enable.` }] };
+  },
+);
+
+// ── resume_policy ─────────────────────────────────────────────────────────────
+server.tool(
+  "resume_policy",
+  "Re-enable a paused PPDM protection policy — scheduled jobs will resume on the next window.",
+  {
+    policy_name: z.string().describe("Policy name (partial match)"),
+  },
+  async ({ policy_name }) => {
+    await withClient(async c => {
+      const policies = await c.listPolicies(policy_name);
+      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
+      await c.setPolicyEnabled(policies[0].id, true);
+    });
+    return { content: [{ type: "text", text: `Policy "${policy_name}" resumed (enabled).` }] };
   },
 );
 

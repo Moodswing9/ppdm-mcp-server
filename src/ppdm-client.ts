@@ -30,6 +30,23 @@ export interface Policy {
   scheduleInfo?: unknown;
 }
 
+export interface PolicySchedule {
+  policyId: string;
+  policyName: string;
+  enabled: boolean;
+  type: string;
+  stages: Array<{
+    id: string;
+    type: string;
+    schedule?: {
+      frequency: string;
+      startTime: string;
+      duration: number;
+      unit?: string;
+    };
+  }>;
+}
+
 export class PPDMClient {
   private http: AxiosInstance;
   private token: string | null = null;
@@ -200,6 +217,42 @@ export class PPDMClient {
     const compliant = assets.filter(a => a.lastBackupTime && a.lastBackupTime > cutoff);
     const nonCompliant = assets.filter(a => !a.lastBackupTime || a.lastBackupTime <= cutoff);
     return { compliant: compliant.length, nonCompliant: nonCompliant.length, assets: nonCompliant };
+  }
+
+  async listSchedules(): Promise<PolicySchedule[]> {
+    const policies = await this.listPolicies();
+    return policies.map(p => ({
+      policyId: p.id,
+      policyName: p.name,
+      enabled: p.enabled,
+      type: p.type,
+      stages: (p as any).stages ?? [],
+    }));
+  }
+
+  async setPolicyEnabled(policyId: string, enabled: boolean): Promise<void> {
+    await this.ensureAuth();
+    const res = await this.http.get(`/protection-policies/${policyId}`);
+    const policy = res.data;
+    await this.http.put(`/protection-policies/${policyId}`, { ...policy, enabled });
+  }
+
+  async updatePolicySchedule(
+    policyId: string,
+    stageIndex: number,
+    opts: { frequency?: string; startTime?: string; duration?: number },
+  ): Promise<void> {
+    await this.ensureAuth();
+    const res = await this.http.get(`/protection-policies/${policyId}`);
+    const policy = res.data;
+    if (!policy.stages?.[stageIndex]) throw new Error(`Stage index ${stageIndex} not found`);
+    const stage = policy.stages[stageIndex];
+    if (stage.schedule) {
+      if (opts.frequency) stage.schedule.frequency = opts.frequency;
+      if (opts.startTime) stage.schedule.startTime = opts.startTime;
+      if (opts.duration !== undefined) stage.schedule.duration = opts.duration;
+    }
+    await this.http.put(`/protection-policies/${policyId}`, policy);
   }
 
   async getSystemHealth(): Promise<Record<string, unknown>> {
