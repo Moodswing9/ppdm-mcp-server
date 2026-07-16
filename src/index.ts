@@ -11,7 +11,7 @@ config();
 
 const server = new McpServer({
   name: "ppdm-mcp-server",
-  version: "4.0.0",
+  version: "4.1.0",
 });
 
 async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {
@@ -398,6 +398,51 @@ server.tool(
       await c.setPolicyEnabled(policies[0].id, true);
     });
     return { content: [{ type: "text", text: `Policy "${policy_name}" resumed (enabled).` }] };
+  },
+);
+
+// ── list_restore_sessions ─────────────────────────────────────────────────────
+server.tool(
+  "list_restore_sessions",
+  "List PPDM restore sessions — filter by state (RUNNING, COMPLETED, FAILED) or leave blank for all recent sessions",
+  {
+    filter: z.string().optional().describe('OData filter, e.g. state eq "RUNNING"'),
+  },
+  async ({ filter }) => {
+    const sessions = await withClient(c => c.listRestoreSessions(filter));
+    return {
+      content: [{ type: "text", text: JSON.stringify(sessions, null, 2) }],
+    };
+  },
+);
+
+// ── get_restore_status ────────────────────────────────────────────────────────
+server.tool(
+  "get_restore_status",
+  "Get full status of a specific restore session by ID — includes percent complete, bytes restored, state, and timing",
+  {
+    sessionId: z.string().describe("Restore session ID"),
+  },
+  async ({ sessionId }) => {
+    const session = await withClient(c => c.getRestoreSession(sessionId));
+    return {
+      content: [{ type: "text", text: JSON.stringify(session, null, 2) }],
+    };
+  },
+);
+
+// ── cancel_restore ────────────────────────────────────────────────────────────
+server.tool(
+  "cancel_restore",
+  "Cancel a running PPDM restore session by ID",
+  {
+    sessionId: z.string().describe("Restore session ID to cancel"),
+  },
+  async ({ sessionId }) => {
+    await withClient(c => c.cancelRestoreSession(sessionId));
+    return {
+      content: [{ type: "text", text: `Restore session ${sessionId} cancelled.` }],
+    };
   },
 );
 

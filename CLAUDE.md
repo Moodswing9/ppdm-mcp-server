@@ -40,7 +40,7 @@ npm run dev
 
 Copy `.env.example` to `.env` and fill in values.
 
-## Tools (29 total)
+## Tools (32 total)
 
 ### PPDM (17 tools)
 
@@ -72,6 +72,13 @@ Copy `.env.example` to `.env` and fill in values.
 | `pause_policy` | Disable a policy — jobs stop running until resumed |
 | `resume_policy` | Re-enable a paused policy |
 
+### PPDM — restore lifecycle
+| Tool | What it does |
+|---|---|
+| `list_restore_sessions` | List restore sessions, filter by state (RUNNING, COMPLETED, FAILED) or all recent |
+| `get_restore_status` | Full status of a restore session — percent complete, bytes restored, state, timing |
+| `cancel_restore` | Cancel a running restore session by ID |
+
 ### NetWorker (6 tools)
 
 | Tool | What it does |
@@ -100,7 +107,7 @@ Requires `DD_HOST`, `DD_USER`, `DD_PASS` env vars (port defaults to 3009).
 
 ```
 src/
-├── index.ts              # MCP server — all 29 tool definitions
+├── index.ts              # MCP server — all 32 tool definitions
 ├── ppdm-client.ts        # PPDMClient — login/logout, activity/asset/policy/poll methods
 ├── networker-client.ts   # NetWorkerClient — Basic Auth, saveset/client/policy methods
 └── datadomain-client.ts  # DataDomainClient — Basic Auth, filesystem/DDBoost/storage units

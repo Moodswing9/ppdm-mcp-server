@@ -47,6 +47,18 @@ export interface PolicySchedule {
   }>;
 }
 
+export interface RestoreSession {
+  id: string;
+  state: string;
+  startTime: string;
+  endTime?: string;
+  assetName?: string;
+  assetType?: string;
+  targetLocation?: string;
+  bytesRestored?: number;
+  percentComplete?: number;
+}
+
 export class PPDMClient {
   private http: AxiosInstance;
   private token: string | null = null;
@@ -253,6 +265,25 @@ export class PPDMClient {
       if (opts.duration !== undefined) stage.schedule.duration = opts.duration;
     }
     await this.http.put(`/protection-policies/${policyId}`, policy);
+  }
+
+  async listRestoreSessions(filter?: string): Promise<RestoreSession[]> {
+    await this.ensureAuth();
+    const params: Record<string, unknown> = { pageSize: 100 };
+    if (filter) params.filter = filter;
+    const res = await this.http.get("/restore-sessions", { params });
+    return res.data?.content ?? res.data ?? [];
+  }
+
+  async getRestoreSession(id: string): Promise<RestoreSession> {
+    await this.ensureAuth();
+    const res = await this.http.get(`/restore-sessions/${id}`);
+    return res.data;
+  }
+
+  async cancelRestoreSession(id: string): Promise<void> {
+    await this.ensureAuth();
+    await this.http.delete(`/restore-sessions/${id}`);
   }
 
   async getSystemHealth(): Promise<Record<string, unknown>> {
