@@ -15,7 +15,7 @@ Open an issue using the **Bug report** template. Include your PPDM, NetWorker or
    npm run build
    ```
 3. Make your change. New tools go in `src/index.ts`; API calls belong in the matching client (`ppdm-client.ts`, `networker-client.ts`, `datadomain-client.ts`).
-4. Make sure `npx tsc --noEmit` and `npm run build` pass. CI runs both on Node 22 and 24.
+4. Add tests in `test/` (clients are tested against a fake HTTP layer; `mcp-server.test.ts` runs the built server over MCP). Make sure `npm test` passes; CI runs it on Node 22 and 24.
 5. Add an entry under a new `[Unreleased]` heading in `CHANGELOG.md`, and update the tool tables in `README.md` if you added or changed a tool.
 6. Open a pull request describing what changed and how you tested it.
 

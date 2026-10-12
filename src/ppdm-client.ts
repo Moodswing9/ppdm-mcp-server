@@ -59,6 +59,27 @@ export interface RestoreSession {
   percentComplete?: number;
 }
 
+/**
+ * Pick exactly one item by name from a partial-match search result.
+ * An exact (case-insensitive) name wins; a single partial match is accepted;
+ * several partial matches are refused so a write tool never acts on the wrong object.
+ */
+export function resolveOne<T extends { name: string }>(items: T[], query: string, kind: string): T {
+  if (items.length === 0) throw new Error(`No ${kind} matching "${query}"`);
+  const exact = items.filter(i => i.name.toLowerCase() === query.toLowerCase());
+  if (exact.length === 1) return exact[0];
+  if (items.length === 1) return items[0];
+  const names = (exact.length > 1 ? exact : items).slice(0, 10).map(i => `"${i.name}"`).join(", ");
+  throw new Error(`${kind[0].toUpperCase()}${kind.slice(1)} name "${query}" is ambiguous — matches ${names}. Use the exact name.`);
+}
+
+/** True when an asset has never been backed up, or its last backup is at or before the cutoff. */
+export function isOutOfSla(asset: Pick<Asset, "lastBackupTime">, cutoffMs: number): boolean {
+  if (!asset.lastBackupTime) return true;
+  const t = Date.parse(asset.lastBackupTime);
+  return Number.isNaN(t) || t <= cutoffMs;
+}
+
 export class PPDMClient {
   private http: AxiosInstance;
   private token: string | null = null;
@@ -158,6 +179,20 @@ export class PPDMClient {
     return this.getAll<Asset>("/assets", params);
   }
 
+  /** Every asset, across all result pages (0-based page / page.totalPages). */
+  async listAllAssets(): Promise<Asset[]> {
+    await this.ensureAuth();
+    const all: Asset[] = [];
+    for (let page = 0; page < 500; page++) {
+      const res = await this.http.get("/assets", { params: { pageSize: 200, page } });
+      const content: Asset[] = res.data?.content ?? (Array.isArray(res.data) ? res.data : []);
+      all.push(...content);
+      const totalPages = Number(res.data?.page?.totalPages ?? 1);
+      if (Array.isArray(res.data) || content.length === 0 || page + 1 >= totalPages) break;
+    }
+    return all;
+  }
+
   async listPolicies(name?: string): Promise<Policy[]> {
     const params: Record<string, unknown> = { pageSize: 100 };
     if (name) params.filter = `name lk "%${name}%"`;
@@ -179,10 +214,8 @@ export class PPDMClient {
     return res.data?.content ?? res.data ?? [];
   }
 
-  async restoreLatest(assetName: string): Promise<{ activityId: string; assetId: string; copyId: string }> {
-    const assets = await this.listAssets({ name: assetName });
-    if (assets.length === 0) throw new Error(`No asset matching "${assetName}"`);
-    const asset  = assets[0];
+  async restoreLatest(assetName: string): Promise<{ activityId: string; assetId: string; assetName: string; copyId: string }> {
+    const asset  = resolveOne(await this.listAssets({ name: assetName, limit: 200 }), assetName, "asset");
     const copies = await this.listCopies(asset.id);
     if (copies.length === 0) throw new Error(`No copies found for asset "${asset.name}"`);
     const copy = copies[0] as { id: string };
@@ -193,24 +226,24 @@ export class PPDMClient {
     return {
       activityId: res.data?.id ?? res.data?.activityId,
       assetId:    asset.id,
+      assetName:  asset.name,
       copyId:     copy.id,
     };
   }
 
-  async bulkTriggerBackup(policyName: string, assetFilter?: { name?: string; type?: string }): Promise<{ triggered: number; activityIds: string[] }> {
+  async bulkTriggerBackup(policyName: string, assetFilter?: { name?: string; type?: string }): Promise<{ policyName: string; triggered: number; activityIds: string[] }> {
     const [policies, assets] = await Promise.all([
       this.listPolicies(policyName),
       this.listAssets({ name: assetFilter?.name, type: assetFilter?.type, limit: 200 }),
     ]);
-    if (policies.length === 0) throw new Error(`No policy matching "${policyName}"`);
-    if (assets.length === 0)   throw new Error("No assets matched the filter");
-    const policy = policies[0];
+    const policy = resolveOne(policies, policyName, "policy");
+    if (assets.length === 0) throw new Error("No assets matched the filter");
     const activityIds: string[] = [];
     for (const asset of assets) {
       const { activityId } = await this.triggerBackup(policy.id, [asset.id]);
       if (activityId) activityIds.push(activityId);
     }
-    return { triggered: activityIds.length, activityIds };
+    return { policyName: policy.name, triggered: activityIds.length, activityIds };
   }
 
   async bulkCancelJobs(assetType?: string): Promise<{ canceled: number; ids: string[] }> {
@@ -223,12 +256,11 @@ export class PPDMClient {
     return { canceled: ids.length, ids };
   }
 
-  async getSlaCompliance(hours = 24): Promise<{ compliant: number; nonCompliant: number; assets: Asset[] }> {
-    const assets = await this.listAssets();
-    const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
-    const compliant = assets.filter(a => a.lastBackupTime && a.lastBackupTime > cutoff);
-    const nonCompliant = assets.filter(a => !a.lastBackupTime || a.lastBackupTime <= cutoff);
-    return { compliant: compliant.length, nonCompliant: nonCompliant.length, assets: nonCompliant };
+  async getSlaCompliance(hours = 24, now = Date.now()): Promise<{ compliant: number; nonCompliant: number; assets: Asset[] }> {
+    const assets = await this.listAllAssets();
+    const cutoff = now - hours * 3600_000;
+    const nonCompliant = assets.filter(a => isOutOfSla(a, cutoff));
+    return { compliant: assets.length - nonCompliant.length, nonCompliant: nonCompliant.length, assets: nonCompliant };
   }
 
   async listSchedules(): Promise<PolicySchedule[]> {
@@ -293,8 +325,9 @@ export class PPDMClient {
       this.listActivities({ state: "RUNNING", limit: 10 }),
       this.listAssets({ limit: 1 }),
     ]);
+    // Samples the 10 most recent failed / running activities; counts are capped at 10.
     return {
-      failedJobsLast24h: failedJobs.length,
+      recentFailedJobs: failedJobs.length,
       runningJobs: runningJobs.length,
       status: failedJobs.length === 0 ? "HEALTHY" : failedJobs.length < 5 ? "WARNING" : "CRITICAL",
     };

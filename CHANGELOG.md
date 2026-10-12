@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.2.0] — 2026-10-12
+### Fixed
+- **Write tools could act on the wrong object.** `trigger_backup`, `restore_latest`, `bulk_trigger_backup`, `update_schedule`, `pause_policy` and `resume_policy` took the first partial-name match, so restoring "sql01" could restore "sql01-old" to its original location. An exact name (case-insensitive) now wins, a single partial match is accepted, and several partial matches are refused with a list of candidates
+- Replies name the policy or asset that was actually used; some echoed the name you typed
+- `get_sla_compliance` checks every asset across all result pages (it stopped at 50) and compares real timestamps instead of strings
+- `get_system_health` labels its count as the latest 10 sampled failed jobs; it claimed "last 24h"
+
+### Added
+- Test suite: 40 tests (`npm test`) covering name resolution, SLA rules, the PPDM, NetWorker and Data Domain clients against a fake HTTP layer, and the built server end to end over MCP. CI and the publish workflow run it
+
 ## [4.1.1] — 2026-10-12
 ### Fixed
 - README documents all 32 tools (it listed 9), NetWorker and Data Domain configuration, and the npm install
