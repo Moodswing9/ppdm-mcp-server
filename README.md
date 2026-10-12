@@ -65,13 +65,13 @@ Set environment variables with `-e` as above, or put them in a `.env` file in th
 
 | Tool | What it does |
 |:---|:---|
-| `get_system_health` | Overall health summary for the PPDM environment |
+| `get_system_health` | Health status from a sample of the 10 most recent failed and running jobs |
 | `list_failed_jobs` | Failed backup jobs with asset, error and start time; filter by asset type |
 | `list_running_jobs` | Currently running backup jobs |
 | `list_assets` | Protected assets; filter by name or type |
 | `list_policies` | Protection policies |
 | `get_activity` | Full detail for one activity |
-| `get_sla_compliance` | Assets not backed up within a given number of hours |
+| `get_sla_compliance` | Every asset not backed up within a given number of hours |
 
 ### PPDM — backup and restore
 
@@ -123,6 +123,8 @@ Set environment variables with `-e` as above, or put them in a `.env` file in th
 | `dd_create_storage_unit` | Create a DDBoost storage unit |
 | `dd_list_users` | Local Data Domain users |
 
+> **Names must be unambiguous.** Tools that take a policy or asset name use an exact match (ignoring case) when there is one, or a partial name that matches exactly one object. If a partial name matches several, the tool refuses and lists them, so it never acts on the wrong object. Replies always name the object that was used.
+
 > **Write tools change your environment.** `trigger_backup`, `bulk_trigger_backup`, `cancel_activity`, `bulk_cancel_jobs`, `restore_latest`, `cancel_restore`, `update_schedule`, `pause_policy`, `resume_policy`, `nw_trigger_save` and `dd_create_storage_unit` all take action. Claude Code asks before running a tool unless you've allowed it, so review those prompts.
 
 ---
@@ -160,6 +162,7 @@ cd ppdm-mcp-server
 npm ci
 npm run build      # compile to dist/
 npm run dev        # run from source
+npm test           # build, then run the tests (no network access needed)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).

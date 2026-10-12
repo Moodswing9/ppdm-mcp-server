@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { PPDMClient } from "./ppdm-client.js";
+import { PPDMClient, resolveOne } from "./ppdm-client.js";
 import { NetWorkerClient } from "./networker-client.js";
 import { DataDomainClient } from "./datadomain-client.js";
 import { config } from "dotenv";
@@ -169,21 +169,20 @@ server.tool(
   "trigger_backup",
   "Trigger an on-demand backup for an asset using a named protection policy.",
   {
-    policy_name: z.string().describe("Exact or partial protection policy name"),
-    asset_name:  z.string().describe("Exact or partial asset name"),
+    policy_name: z.string().describe("Policy name — exact, or a partial name that matches only one policy"),
+    asset_name:  z.string().describe("Asset name — exact, or a partial name that matches only one asset"),
   },
   async ({ policy_name, asset_name }) => {
-    const { activityId } = await withClient(async c => {
-      const policies = await c.listPolicies(policy_name);
-      const assets   = await c.listAssets({ name: asset_name });
-      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
-      if (assets.length   === 0) throw new Error(`No asset matching "${asset_name}"`);
-      return c.triggerBackup(policies[0].id, [assets[0].id]);
+    const { activityId, policy, asset } = await withClient(async c => {
+      const policy = resolveOne(await c.listPolicies(policy_name), policy_name, "policy");
+      const asset  = resolveOne(await c.listAssets({ name: asset_name, limit: 200 }), asset_name, "asset");
+      const { activityId } = await c.triggerBackup(policy.id, [asset.id]);
+      return { activityId, policy, asset };
     });
     return {
       content: [{
         type: "text",
-        text: `Backup triggered. Activity ID: ${activityId}\nUse get_activity to monitor progress.`,
+        text: `Backup triggered for asset "${asset.name}" with policy "${policy.name}". Activity ID: ${activityId}\nUse get_activity to monitor progress.`,
       }],
     };
   },
@@ -222,7 +221,7 @@ server.tool(
       content: [{
         type: "text",
         text: `PPDM Health: ${health.status}\n` +
-              `Failed jobs (last 24h): ${health.failedJobsLast24h}\n` +
+              `Recent failed jobs (latest 10 sampled): ${health.recentFailedJobs}\n` +
               `Running jobs: ${health.runningJobs}`,
       }],
     };
@@ -269,14 +268,14 @@ server.tool(
   "restore_latest",
   "Restore an asset to its original location from the most recent copy — single call, no manual copy browsing needed.",
   {
-    asset_name: z.string().describe("Asset name (partial match accepted)"),
+    asset_name: z.string().describe("Asset name — exact, or a partial name that matches only one asset"),
   },
   async ({ asset_name }) => {
-    const { activityId, assetId, copyId } = await withClient(c => c.restoreLatest(asset_name));
+    const { activityId, assetId, assetName, copyId } = await withClient(c => c.restoreLatest(asset_name));
     return {
       content: [{
         type: "text",
-        text: `Restore triggered.\n\nAsset ID:    ${assetId}\nCopy ID:     ${copyId}\nActivity ID: ${activityId}\n\nUse poll_until_complete with activity ID to monitor progress.`,
+        text: `Restore triggered for asset "${assetName}".\n\nAsset ID:    ${assetId}\nCopy ID:     ${copyId}\nActivity ID: ${activityId}\n\nUse poll_until_complete with activity ID to monitor progress.`,
       }],
     };
   },
@@ -287,12 +286,12 @@ server.tool(
   "bulk_trigger_backup",
   "Trigger on-demand backup for all assets matching an optional filter under a named policy.",
   {
-    policy_name:  z.string().describe("Protection policy name (partial match)"),
+    policy_name:  z.string().describe("Policy name — exact, or a partial name that matches only one policy"),
     asset_name:   z.string().optional().describe("Filter assets by name substring"),
     asset_type:   z.string().optional().describe("Filter assets by type (e.g. KUBERNETES)"),
   },
   async ({ policy_name, asset_name, asset_type }) => {
-    const { triggered, activityIds } = await withClient(c =>
+    const { policyName, triggered, activityIds } = await withClient(c =>
       c.bulkTriggerBackup(policy_name, { name: asset_name, type: asset_type })
     );
     return {
@@ -300,7 +299,7 @@ server.tool(
         type: "text",
         text: triggered === 0
           ? "No backups triggered — no matching assets found."
-          : `Triggered ${triggered} backup(s).\n\nActivity IDs:\n` +
+          : `Triggered ${triggered} backup(s) with policy "${policyName}".\n\nActivity IDs:\n` +
             activityIds.map(id => `• ${id}`).join("\n"),
       }],
     };
@@ -351,23 +350,23 @@ server.tool(
   "update_schedule",
   "Update the schedule of a PPDM protection policy stage — change frequency, start time, or duration.",
   {
-    policy_name:  z.string().describe("Policy name (partial match)"),
+    policy_name:  z.string().describe("Policy name — exact, or a partial name that matches only one policy"),
     stage_index:  z.number().optional().default(0).describe("Stage index to update (default 0 = first stage)"),
     frequency:    z.string().optional().describe("New frequency, e.g. HOURLY, DAILY, WEEKLY"),
     start_time:   z.string().optional().describe("New start time, e.g. 02:00"),
     duration_mins: z.number().optional().describe("New window duration in minutes"),
   },
   async ({ policy_name, stage_index, frequency, start_time, duration_mins }) => {
-    await withClient(async c => {
-      const policies = await c.listPolicies(policy_name);
-      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
-      await c.updatePolicySchedule(policies[0].id, stage_index ?? 0, {
+    const policy = await withClient(async c => {
+      const policy = resolveOne(await c.listPolicies(policy_name), policy_name, "policy");
+      await c.updatePolicySchedule(policy.id, stage_index ?? 0, {
         frequency,
         startTime: start_time,
         duration: duration_mins,
       });
+      return policy;
     });
-    return { content: [{ type: "text", text: `Schedule updated for policy matching "${policy_name}".` }] };
+    return { content: [{ type: "text", text: `Schedule updated for policy "${policy.name}".` }] };
   },
 );
 
@@ -376,15 +375,15 @@ server.tool(
   "pause_policy",
   "Disable (pause) a PPDM protection policy — jobs will not run until resumed.",
   {
-    policy_name: z.string().describe("Policy name (partial match)"),
+    policy_name: z.string().describe("Policy name — exact, or a partial name that matches only one policy"),
   },
   async ({ policy_name }) => {
-    await withClient(async c => {
-      const policies = await c.listPolicies(policy_name);
-      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
-      await c.setPolicyEnabled(policies[0].id, false);
+    const policy = await withClient(async c => {
+      const policy = resolveOne(await c.listPolicies(policy_name), policy_name, "policy");
+      await c.setPolicyEnabled(policy.id, false);
+      return policy;
     });
-    return { content: [{ type: "text", text: `Policy "${policy_name}" paused (disabled). Use resume_policy to re-enable.` }] };
+    return { content: [{ type: "text", text: `Policy "${policy.name}" paused (disabled). Use resume_policy to re-enable.` }] };
   },
 );
 
@@ -393,15 +392,15 @@ server.tool(
   "resume_policy",
   "Re-enable a paused PPDM protection policy — scheduled jobs will resume on the next window.",
   {
-    policy_name: z.string().describe("Policy name (partial match)"),
+    policy_name: z.string().describe("Policy name — exact, or a partial name that matches only one policy"),
   },
   async ({ policy_name }) => {
-    await withClient(async c => {
-      const policies = await c.listPolicies(policy_name);
-      if (policies.length === 0) throw new Error(`No policy matching "${policy_name}"`);
-      await c.setPolicyEnabled(policies[0].id, true);
+    const policy = await withClient(async c => {
+      const policy = resolveOne(await c.listPolicies(policy_name), policy_name, "policy");
+      await c.setPolicyEnabled(policy.id, true);
+      return policy;
     });
-    return { content: [{ type: "text", text: `Policy "${policy_name}" resumed (enabled).` }] };
+    return { content: [{ type: "text", text: `Policy "${policy.name}" resumed (enabled).` }] };
   },
 );
 
