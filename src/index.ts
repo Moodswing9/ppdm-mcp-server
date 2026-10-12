@@ -6,12 +6,16 @@ import { PPDMClient } from "./ppdm-client.js";
 import { NetWorkerClient } from "./networker-client.js";
 import { DataDomainClient } from "./datadomain-client.js";
 import { config } from "dotenv";
+import { createRequire } from "module";
 
 config();
 
+// package.json sits one level above both src/ (tsx) and dist/ (built)
+const { version: VERSION } = createRequire(import.meta.url)("../package.json") as { version: string };
+
 const server = new McpServer({
   name: "ppdm-mcp-server",
-  version: "4.1.0",
+  version: VERSION,
 });
 
 async function withClient<T>(fn: (c: PPDMClient) => Promise<T>): Promise<T> {

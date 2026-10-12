@@ -15,7 +15,7 @@ npm run build
 npm start
 
 # Add to Claude Code
-claude mcp add ppdm-mcp-server npx ppdm-mcp-server
+claude mcp add ppdm-mcp-server -e PPDM_HOST=... -e PPDM_USER=... -e PPDM_PASS=... -- npx -y ppdm-mcp-server
 
 # Dev mode (no build step)
 npm run dev
@@ -42,7 +42,7 @@ Copy `.env.example` to `.env` and fill in values.
 
 ## Tools (32 total)
 
-### PPDM (17 tools)
+### PPDM (20 tools) — core
 
 | Tool | What it does |
 |---|---|
