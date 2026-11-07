@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.2.1] — 2026-11-07
+### Security
+- `@modelcontextprotocol/sdk` 1.31.0 → 1.32.2: an oversized HTTP request could exhaust server memory
+- `zod` → 4.6.7 (memory exhaustion validating oversized collections), `body-parser` → 2.4.0 (DoS via trailing bytes after compressed requests), `fast-uri` → 3.1.9, `ip-address` → 10.7.6
+- `npm audit`: 0 vulnerabilities
+
+### Changed
+- `zod` declared as a direct dependency (it is imported directly but only arrived through the MCP SDK)
+
 ## [4.2.0] — 2026-10-12
 ### Fixed
 - **Write tools could act on the wrong object.** `trigger_backup`, `restore_latest`, `bulk_trigger_backup`, `update_schedule`, `pause_policy` and `resume_policy` took the first partial-name match, so restoring "sql01" could restore "sql01-old" to its original location. An exact name (case-insensitive) now wins, a single partial match is accepted, and several partial matches are refused with a list of candidates
