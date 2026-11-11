@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.2] — 2026-11-11
+### Changed
+- `dotenv` 16 → 18. Its "injected env" message now goes to stderr, so it can't corrupt the MCP protocol on stdout (verified with a stdio handshake)
+- `axios` 1.20.0 → 1.21.0
+- Removed the unused `https-proxy-agent` dependency (nothing imported it)
+- `npm audit`: 0 vulnerabilities
+
 ## [4.2.1] — 2026-11-07
 ### Security
 - `@modelcontextprotocol/sdk` 1.31.0 → 1.32.2: an oversized HTTP request could exhaust server memory
