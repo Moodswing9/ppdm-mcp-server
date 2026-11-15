@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import { tlsAgent } from "./tls.js";
+import { tlsAgent, withTlsHints } from "./tls.js";
 
 export interface DDStorageUnit {
   name: string;
@@ -30,12 +30,12 @@ export class DataDomainClient {
     private password: string,
     port = 3009,
   ) {
-    this.http = axios.create({
+    this.http = withTlsHints(axios.create({
       baseURL: `https://${host}:${port}/rest/v1.0`,
       auth: { username, password },
       httpsAgent: tlsAgent("DD"),
       timeout: 30_000,
-    });
+    }), "DD");
   }
 
   static fromEnv(): DataDomainClient {

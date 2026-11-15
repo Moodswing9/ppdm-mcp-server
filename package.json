@@ -1,6 +1,6 @@
 {
   "name": "ppdm-mcp-server",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "MCP server for Dell EMC PowerProtect Data Manager and NetWorker — exposes backup infrastructure as Claude Code tools",
   "type": "module",
   "bin": {

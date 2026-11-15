@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import axios from "axios";
-import { tlsAgent } from "../src/tls.js";
+import { tlsAgent, tlsHint } from "../src/tls.js";
 
 let dir: string;
 let server: https.Server;
@@ -18,12 +18,12 @@ let url: string;
 let serverCert: string; // trusted: the server's own self-signed cert
 let otherCert: string;  // unrelated self-signed cert
 
-function selfSigned(name: string): { key: string; cert: string } {
+function selfSigned(name: string, san = "DNS:localhost,IP:127.0.0.1"): { key: string; cert: string } {
   const key = path.join(dir, `${name}.key`);
   const cert = path.join(dir, `${name}.pem`);
   execFileSync("openssl", [
     "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-    "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+    "-subj", "/CN=localhost", "-addext", `subjectAltName=${san}`,
     "-keyout", key, "-out", cert,
   ], { stdio: "ignore" });
   return { key, cert };
@@ -94,4 +94,52 @@ test("all three clients verify certificates by default", async () => {
   } finally {
     process.env = saved;
   }
+});
+
+// ---- 5.0.1: TLS errors tell the user what to do -----------------------------
+
+async function loginError(caFile?: string, port?: number): Promise<string> {
+  const { PPDMClient } = await import("../src/ppdm-client.js");
+  const saved = process.env.PPDM_CA_FILE;
+  if (caFile) process.env.PPDM_CA_FILE = caFile; else delete process.env.PPDM_CA_FILE;
+  try {
+    const p = port ?? Number(new URL(url).port);
+    const c = new PPDMClient("127.0.0.1", "u", "p", p);
+    await c.login();
+    return "(no error)";
+  } catch (err) {
+    return (err as Error).message;
+  } finally {
+    if (saved === undefined) delete process.env.PPDM_CA_FILE; else process.env.PPDM_CA_FILE = saved;
+  }
+}
+
+test("self-signed appliance, no CA file: the error says to set PPDM_CA_FILE", async () => {
+  const msg = await loginError();
+  assert.match(msg, /self[- ]signed certificate/i);
+  assert.match(msg, /PPDM's TLS certificate is not trusted\. If it is self-signed, set PPDM_CA_FILE/);
+  assert.match(msg, /github\.com\/Moodswing9\/ppdm-mcp-server#tls-certificates/);
+});
+
+test("wrong CA file: the error says the CA file does not match", async () => {
+  const msg = await loginError(otherCert);
+  assert.match(msg, /not signed by the certificate in PPDM_CA_FILE/);
+});
+
+test("host name mismatch: the error says to use the certificate's host name", async () => {
+  const s = selfSigned("wrong-name", "DNS:other.example");
+  const srv = https.createServer({ key: fs.readFileSync(s.key), cert: fs.readFileSync(s.cert) }, (_q, r) => r.end("{}"));
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  try {
+    const msg = await loginError(s.cert, (srv.address() as AddressInfo).port);
+    assert.match(msg, /does not match PPDM_HOST/);
+  } finally {
+    srv.close();
+  }
+});
+
+test("hints cover expired certificates and leave other errors alone", () => {
+  assert.match(tlsHint("CERT_HAS_EXPIRED", "DD", {}) ?? "", /DD's TLS certificate has expired/);
+  assert.equal(tlsHint("ECONNREFUSED", "PPDM", {}), undefined);
+  assert.equal(tlsHint(undefined, "PPDM", {}), undefined);
 });
