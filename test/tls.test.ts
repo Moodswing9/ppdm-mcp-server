@@ -50,12 +50,6 @@ after(() => {
 const get = (env: NodeJS.ProcessEnv) =>
   axios.get(url, { httpsAgent: tlsAgent("PPDM", env), timeout: 5_000 });
 
-function quietStderr<T>(fn: () => T): { result: T; stderr: string } {
-  const orig = console.error;
-  let stderr = "";
-  console.error = (...a: unknown[]) => { stderr += a.join(" ") + "\n"; };
-  try { return { result: fn(), stderr }; } finally { console.error = orig; }
-}
 
 test("default: a self-signed certificate is rejected", async () => {
   await assert.rejects(get({}), (err: { code?: string }) =>
@@ -71,29 +65,18 @@ test("CA_FILE with an unrelated certificate: rejected", async () => {
   await assert.rejects(get({ PPDM_CA_FILE: otherCert }));
 });
 
-test("TLS_INSECURE=true: connection succeeds and a warning is printed", async () => {
-  const { result: agent, stderr } = quietStderr(() => tlsAgent("PPDM", { PPDM_TLS_INSECURE: "true" }));
-  assert.match(stderr, /PPDM_TLS_INSECURE=true - TLS certificate verification is OFF for PPDM/);
-  const res = await axios.get(url, { httpsAgent: agent, timeout: 5_000 });
-  assert.equal(res.data, "ok");
+test("there is no opt-out: PPDM_TLS_INSECURE is ignored", async () => {
+  await assert.rejects(get({ PPDM_TLS_INSECURE: "true" }));
 });
 
-test("TLS_INSECURE=false behaves like the default", async () => {
-  await assert.rejects(get({ PPDM_TLS_INSECURE: "false" }));
-});
 
-test("invalid settings fail loudly instead of falling back to insecure", () => {
-  assert.throws(() => tlsAgent("NW", { NW_TLS_INSECURE: "yes" }), /NW_TLS_INSECURE must be "true" or "false"/);
+test("an unreadable CA file fails loudly instead of falling back", () => {
   assert.throws(() => tlsAgent("DD", { DD_CA_FILE: path.join(os.tmpdir(), "missing.pem") }), /DD_CA_FILE: cannot read/);
-  assert.throws(
-    () => quietStderr(() => tlsAgent("PPDM", { PPDM_TLS_INSECURE: "true", PPDM_CA_FILE: "x.pem" })),
-    /Set either PPDM_CA_FILE or PPDM_TLS_INSECURE, not both/,
-  );
 });
 
-test("each client reads its own prefix", () => {
-  const { stderr } = quietStderr(() => tlsAgent("NW", { PPDM_TLS_INSECURE: "true" }));
-  assert.equal(stderr, "", "PPDM_TLS_INSECURE must not affect NW");
+test("each client reads its own prefix", async () => {
+  // PPDM's CA must not be trusted for NW.
+  await assert.rejects(axios.get(url, { httpsAgent: tlsAgent("NW", { PPDM_CA_FILE: serverCert }), timeout: 5_000 }));
 });
 
 test("all three clients verify certificates by default", async () => {
@@ -101,7 +84,7 @@ test("all three clients verify certificates by default", async () => {
   const { NetWorkerClient } = await import("../src/networker-client.js");
   const { DataDomainClient } = await import("../src/datadomain-client.js");
   const saved = { ...process.env };
-  for (const k of Object.keys(process.env)) if (/_(TLS_INSECURE|CA_FILE)$/.test(k)) delete process.env[k];
+  for (const k of Object.keys(process.env)) if (/_CA_FILE$/.test(k)) delete process.env[k];
   try {
     for (const client of [new PPDMClient("h", "u", "p"), new NetWorkerClient("h", "u", "p"), new DataDomainClient("h", "u", "p")]) {
       const agent = (client as unknown as { http: { defaults: { httpsAgent: https.Agent } } }).http.defaults.httpsAgent;
