@@ -11,6 +11,10 @@
 
 </div>
 
+> [!IMPORTANT]
+> **Upgrading from 4.x:** 5.0 verifies TLS certificates. If your PPDM, NetWorker or Data Domain uses a self-signed certificate, set `PPDM_CA_FILE` / `NW_CA_FILE` / `DD_CA_FILE` (see [TLS certificates](#tls-certificates)), or connections will fail.
+> If you registered `npx -y ppdm-mcp-server` without a version, you already run 5.0. To stay on 4.x until you've set the CA file, register `npx -y ppdm-mcp-server@4` (4.x does **not** verify certificates).
+
 ---
 
 ## Overview
@@ -40,10 +44,12 @@ Register the server with Claude Code, passing the settings for the systems you u
 ```bash
 claude mcp add ppdm-mcp-server \
   -e PPDM_HOST=ppdm.example.com -e PPDM_USER=admin -e PPDM_PASS=... \
-  -- npx -y ppdm-mcp-server
+  -- npx -y ppdm-mcp-server@5
 ```
 
-The first `npx` start downloads the package and can take up to a minute. For instant starts, install it once with `npm install -g ppdm-mcp-server` and register `-- ppdm-mcp-server` instead.
+The first `npx` start downloads the package and can take up to a minute. For instant starts, install it once with `npm install -g ppdm-mcp-server@5` and register `-- ppdm-mcp-server` instead.
+
+The `@5` pins the major version, so a future breaking release never reaches you without you choosing it.
 
 ---
 
