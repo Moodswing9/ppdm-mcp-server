@@ -1,5 +1,10 @@
 # Changelog
 
+## [5.0.1] — 2026-11-15
+### Fixed
+- TLS errors now say what to do. A self-signed or untrusted certificate adds "set `PPDM_CA_FILE` (or `NW_`/`DD_`) to its certificate" with a link to the README; a CA file that doesn't match, a host name mismatch and an expired certificate each get their own hint. Other errors are unchanged
+- The npm page now shows the "Upgrading from 4.x" note and version-pinned setup examples
+
 ## [5.0.0] — 2026-11-15
 ### Security
 - **TLS certificates are now verified** for PPDM, NetWorker and Data Domain. Before, verification was always off, so the credentials sent at login could be intercepted on the network (CodeQL `js/disabling-certificate-validation`)

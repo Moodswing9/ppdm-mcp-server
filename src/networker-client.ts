@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import { tlsAgent } from "./tls.js";
+import { tlsAgent, withTlsHints } from "./tls.js";
 
 export interface Saveset {
   id: string;
@@ -38,12 +38,12 @@ export class NetWorkerClient {
     port = 9090,
   ) {
     this.baseUrl = `https://${host}:${port}/nwrestapi/v3`;
-    this.http = axios.create({
+    this.http = withTlsHints(axios.create({
       baseURL: this.baseUrl,
       auth: { username, password },
       httpsAgent: tlsAgent("NW"),
       timeout: 30_000,
-    });
+    }), "NW");
   }
 
   static fromEnv(): NetWorkerClient {
