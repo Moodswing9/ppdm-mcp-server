@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.3.0] — 2026-11-15
+### Security
+- **TLS certificates are now verified** for PPDM, NetWorker and Data Domain. Before, verification was always off, so the credentials sent at login could be intercepted on the network (CodeQL `js/disabling-certificate-validation`)
+
+### Action required
+Appliances with self-signed certificates will refuse to connect after upgrading until you set `PPDM_CA_FILE` / `NW_CA_FILE` / `DD_CA_FILE` to the appliance's CA or self-signed certificate (PEM). The README shows how to fetch it. There is deliberately no option to turn verification off
+
+### Added
+- `src/tls.ts`: one place that builds the HTTPS agent for all three clients. An unreadable CA file stops with a clear error instead of falling back to insecure
+- 7 tests against a real local HTTPS server with a self-signed certificate (generated per run): rejected by default, accepted with the right CA file, rejected with the wrong one, no bypass via `PPDM_TLS_INSECURE`, CA files don't leak across systems; and a check that every client verifies by default
+
 ## [4.2.2] — 2026-11-11
 ### Changed
 - `dotenv` 16 → 18. Its "injected env" message now goes to stderr, so it can't corrupt the MCP protocol on stdout (verified with a stdio handshake)

@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import https from "https";
+import { tlsAgent } from "./tls.js";
 
 export interface DDStorageUnit {
   name: string;
@@ -33,7 +33,7 @@ export class DataDomainClient {
     this.http = axios.create({
       baseURL: `https://${host}:${port}/rest/v1.0`,
       auth: { username, password },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      httpsAgent: tlsAgent("DD"),
       timeout: 30_000,
     });
   }

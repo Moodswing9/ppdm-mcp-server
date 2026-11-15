@@ -117,7 +117,7 @@ src/
 
 **Auth:** PPDM uses Bearer token (login → token → logout per request). NetWorker uses HTTP Basic Auth.
 
-**SSL:** Both clients disable certificate verification (`rejectUnauthorized: false`) — suitable for self-signed lab/enterprise certs.
+**TLS:** All three clients get their HTTPS agent from `src/tls.ts` (`tlsAgent("PPDM" | "NW" | "DD")`). Certificates are always verified; `<PREFIX>_CA_FILE` trusts a specific CA or self-signed cert. There is deliberately no opt-out. Never hardcode `rejectUnauthorized: false` in a client — `test/tls.test.ts` and the CodeQL ruleset will fail the PR.
 
 ## Key Constraints
 
