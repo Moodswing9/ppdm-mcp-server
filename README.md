@@ -57,6 +57,23 @@ Set environment variables with `-e` as above, or put them in a `.env` file in th
 | NetWorker | `NW_HOST`, `NW_USER`, `NW_PASS`, `NW_PORT` | `9090` |
 | Data Domain | `DD_HOST`, `DD_USER`, `DD_PASS`, `DD_PORT` | `3009` |
 
+### TLS certificates
+
+Certificates are **verified** (since 4.3.0). PPDM, NetWorker and Data Domain usually ship with self-signed certificates, so for each system you connect to, set one of:
+
+| Variable | Effect |
+|:---|:---|
+| `PPDM_CA_FILE`, `NW_CA_FILE`, `DD_CA_FILE` | Path to a PEM file with the CA that signed the appliance's certificate, or the appliance's own self-signed certificate. The connection stays verified. **Recommended.** |
+| `PPDM_TLS_INSECURE`, `NW_TLS_INSECURE`, `DD_TLS_INSECURE` | `true` turns verification off for that system (labs only: credentials can be intercepted). A warning is printed to stderr. |
+
+To get an appliance's self-signed certificate:
+
+```bash
+openssl s_client -connect ppdm.example.com:8443 -showcerts </dev/null 2>/dev/null   | openssl x509 -outform PEM > ppdm-ca.pem
+```
+
+Check the fingerprint (`openssl x509 -in ppdm-ca.pem -noout -fingerprint -sha256`) against the appliance's UI or console before trusting it. Node's `NODE_EXTRA_CA_CERTS` also works if you'd rather trust a CA process-wide.
+
 ---
 
 ## Tools
@@ -149,7 +166,7 @@ Is the Data Domain running low on space?
 
 ## Security notes
 
-- **TLS verification is disabled** for all three systems, because they commonly use self-signed certificates. Run the server on a trusted internal network.
+- **TLS certificates are verified** for all three systems. Trust a self-signed appliance with `*_CA_FILE` rather than `*_TLS_INSECURE` (see [TLS certificates](#tls-certificates)).
 - Credentials are read from environment variables and never logged.
 
 ---

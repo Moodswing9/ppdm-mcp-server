@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import https from "https";
+import { tlsAgent } from "./tls.js";
 
 export interface Activity {
   id: string;
@@ -94,7 +94,7 @@ export class PPDMClient {
     this.baseUrl = `https://${host}:${port}/api/v2`;
     this.http = axios.create({
       baseURL: this.baseUrl,
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      httpsAgent: tlsAgent("PPDM"),
       timeout: 30_000,
     });
   }

@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
-import https from "https";
+import { tlsAgent } from "./tls.js";
 
 export interface Saveset {
   id: string;
@@ -41,7 +41,7 @@ export class NetWorkerClient {
     this.http = axios.create({
       baseURL: this.baseUrl,
       auth: { username, password },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      httpsAgent: tlsAgent("NW"),
       timeout: 30_000,
     });
   }
