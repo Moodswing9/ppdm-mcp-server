@@ -1,6 +1,6 @@
 # Changelog
 
-## [4.3.0] — 2026-11-15
+## [5.0.0] — 2026-11-15
 ### Security
 - **TLS certificates are now verified** for PPDM, NetWorker and Data Domain. Before, verification was always off, so the credentials sent at login could be intercepted on the network (CodeQL `js/disabling-certificate-validation`)
 
