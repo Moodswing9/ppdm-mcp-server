@@ -59,7 +59,7 @@ Set environment variables with `-e` as above, or put them in a `.env` file in th
 
 ### TLS certificates
 
-Certificates are **always verified** (since 4.3.0); there is no option to turn verification off. PPDM, NetWorker and Data Domain usually ship with self-signed certificates, so for each such system set:
+Certificates are **always verified** (since 5.0.0); there is no option to turn verification off. PPDM, NetWorker and Data Domain usually ship with self-signed certificates, so for each such system set:
 
 | Variable | Effect |
 |:---|:---|
